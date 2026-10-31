@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>CURRENCY</title>
+<style>
+:root{--bg:#fff;--fg:#111;--muted:#666;--line:#d8d8d8;--soft:#f3f3f3}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Noto Sans Bengali",sans-serif}
+header{padding:16px 12px 8px;margin-bottom:38px;text-align:center;background:#d90000;color:#fff;border-bottom:1px solid #b80000;position:relative}
+h1{font-size:27px;letter-spacing:3px;margin:0;font-weight:850}
+.lang-switch{position:absolute;right:0;bottom:-35px;display:flex;gap:4px;z-index:2}
+.lang-switch button{font-size:11px;padding:5px 7px;border:1px solid #d90000;border-radius:6px;background:#fff;color:#c00;line-height:1.2}
+.lang-switch button.active{background:#d90000;color:#fff}
+.pill.active-from{background:#0878e8;color:#fff;border-color:#0878e8}
+.pill.active-to{background:#d90000;color:#fff;border-color:#d90000}
+.country-option.selected-from{background:#0878e8;color:#fff}
+.country-option.selected-to{background:#d90000;color:#fff}
+main{max-width:560px;margin:auto;padding:18px 14px 30px}
+.section-label{font-size:14px;font-weight:700;margin:17px 0 8px}
+.search-wrap{position:relative}
+.search{width:100%;padding:12px 13px;border:1px solid var(--line);border-radius:12px;background:white;color:#111;font-size:15px;outline:none}
+.search:focus,.amount:focus{border-color:#111}
+.pills{display:flex;gap:7px;overflow-x:auto;padding:8px 1px 10px;scrollbar-width:thin;white-space:nowrap}
+.pill{flex:0 0 auto;border:1px solid var(--line);background:#fff;color:#111;border-radius:9px;padding:7px 10px;font-size:13px;max-width:170px;overflow:hidden;text-overflow:ellipsis}
+.country-list{display:none;max-height:190px;overflow-y:auto;border:1px solid var(--line);border-radius:10px;margin-top:5px}
+.country-list.show{display:block}
+.country-option{padding:10px 12px;border-bottom:1px solid #eee;font-size:14px}
+.country-option:last-child{border-bottom:0}
+.country-option:active{filter:brightness(.95)}
+.amount{width:100%;padding:14px;border:1px solid var(--line);border-radius:12px;font-size:22px;font-weight:650;color:#111;background:#fff;outline:none}
+.result{margin-top:22px;border:1px solid var(--line);border-radius:15px;padding:22px 14px;text-align:center;min-height:96px;display:flex;align-items:center;justify-content:center;overflow-wrap:anywhere}
+.result-value{font-size:32px;font-weight:800;letter-spacing:.2px}
+.note{font-size:12px;color:var(--muted);text-align:center;line-height:1.5;margin:13px 6px}
+.status{font-size:12px;color:var(--muted);text-align:center;margin-top:8px}
+button{cursor:pointer}
+</style>
+</head>
+<body>
+<header><h1>CURRENCY</h1><div class="lang-switch" aria-label="Language"><button id="langEn" class="active" type="button">English</button><button id="langBn" type="button">বাংলা</button></div></header>
+<main>
+  <div class="section-label" data-i18n="from">Convert from</div>
+  <div class="search-wrap">
+    <input id="fromSearch" class="search" placeholder="Search country or currency..." data-i18n-placeholder="search" autocomplete="off">
+    <div id="fromList" class="country-list"></div>
+  </div>
+  <div id="fromPills" class="pills"></div>
+
+  <div class="section-label" data-i18n="amount">Amount</div>
+  <input id="amount" class="amount" type="number" inputmode="decimal" min="0" step="any" value="" placeholder="0" aria-label="Amount">
+
+  <div class="section-label" data-i18n="to">Convert to</div>
+  <div class="search-wrap">
+    <input id="toSearch" class="search" placeholder="Search country or currency..." data-i18n-placeholder="search" autocomplete="off">
+    <div id="toList" class="country-list"></div>
+  </div>
+  <div id="toPills" class="pills"></div>
+
+  <div class="result"><div id="result" class="result-value">—</div></div>
+</main>
+<script>
+let language="en";
+const translations={
+ en:{from:"Convert from",amount:"Amount",to:"Convert to",search:"Search country or currency..."},
+ bn:{from:"যে দেশ থেকে",amount:"পরিমাণ",to:"যে দেশে রূপান্তর",search:"দেশ বা মুদ্রা খুঁজুন..."}
+};
+function setLanguage(lang){
+ language=lang;
+ document.documentElement.lang=lang==="bn"?"bn":"en";
+ document.querySelectorAll("[data-i18n]").forEach(el=>{const key=el.dataset.i18n;el.textContent=translations[lang][key]});
+ document.querySelectorAll("[data-i18n-placeholder]").forEach(el=>{el.placeholder=translations[lang][el.dataset.i18nPlaceholder]});
+ document.getElementById("langEn").classList.toggle("active",lang==="en");
+ document.getElementById("langBn").classList.toggle("active",lang==="bn");
+ // Update visible country names immediately when the language changes.
+ document.querySelectorAll(".country-option").forEach(el=>{
+   const country=el.dataset.country, code=el.dataset.code;
+   if(country && code) el.textContent=(lang==="bn"?(bnCountries[country]||country):country)+" · "+code;
+ });
+ render();
+}
+document.getElementById("langEn").addEventListener("click",()=>setLanguage("en"));
+document.getElementById("langBn").addEventListener("click",()=>setLanguage("bn"));
+const countries = [
+["Afghanistan","AFN"],["Albania","ALL"],["Algeria","DZD"],["Andorra","EUR"],["Angola","AOA"],["Antigua and Barbuda","XCD"],["Argentina","ARS"],["Armenia","AMD"],["Australia","AUD"],["Austria","EUR"],["Azerbaijan","AZN"],
+["Bahamas","BSD"],["Bahrain","BHD"],["Bangladesh","BDT"],["Barbados","BBD"],["Belarus","BYN"],["Belgium","EUR"],["Belize","BZD"],["Benin","XOF"],["Bhutan","BTN"],["Bolivia","BOB"],["Bosnia and Herzegovina","BAM"],["Botswana","BWP"],["Brazil","BRL"],["Brunei","BND"],["Bulgaria","BGN"],["Burkina Faso","XOF"],["Burundi","BIF"],
+["Cambodia","KHR"],["Cameroon","XAF"],["Canada","CAD"],["Cape Verde","CVE"],["Central African Republic","XAF"],["Chad","XAF"],["Chile","CLP"],["China","CNY"],["Colombia","COP"],["Comoros","KMF"],["Costa Rica","CRC"],["Croatia","EUR"],["Cuba","CUP"],["Cyprus","EUR"],["Czechia","CZK"],
+["Democratic Republic of the Congo","CDF"],["Denmark","DKK"],["Djibouti","DJF"],["Dominica","XCD"],["Dominican Republic","DOP"],
+["Ecuador","USD"],["Egypt","EGP"],["El Salvador","USD"],["Equatorial Guinea","XAF"],["Eritrea","ERN"],["Estonia","EUR"],["Eswatini","SZL"],["Ethiopia","ETB"],
+["Fiji","FJD"],["Finland","EUR"],["France","EUR"],
+["Gabon","XAF"],["Gambia","GMD"],["Georgia","GEL"],["Germany","EUR"],["Ghana","GHS"],["Greece","EUR"],["Grenada","XCD"],["Guatemala","GTQ"],["Guinea","GNF"],["Guinea-Bissau","XOF"],["Guyana","GYD"],
+["Haiti","HTG"],["Honduras","HNL"],["Hungary","HUF"],
+["Iceland","ISK"],["India","INR"],["Indonesia","IDR"],["Iran","IRR"],["Iraq","IQD"],["Ireland","EUR"],["Israel","ILS"],["Italy","EUR"],
+["Jamaica","JMD"],["Japan","JPY"],["Jordan","JOD"],
+["Kazakhstan","KZT"],["Kenya","KES"],["Kiribati","AUD"],["Kosovo","EUR"],["Kuwait","KWD"],["Kyrgyzstan","KGS"],
+["Laos","LAK"],["Latvia","EUR"],["Lebanon","LBP"],["Lesotho","LSL"],["Liberia","LRD"],["Libya","LYD"],["Liechtenstein","CHF"],["Lithuania","EUR"],["Luxembourg","EUR"],
+["Madagascar","MGA"],["Malawi","MWK"],["Malaysia","MYR"],["Maldives","MVR"],["Mali","XOF"],["Malta","EUR"],["Marshall Islands","USD"],["Mauritania","MRU"],["Mauritius","MUR"],["Mexico","MXN"],["Micronesia","USD"],["Moldova","MDL"],["Monaco","EUR"],["Mongolia","MNT"],["Montenegro","EUR"],["Morocco","MAD"],["Mozambique","MZN"],["Myanmar","MMK"],
+["Namibia","NAD"],["Nauru","AUD"],["Nepal","NPR"],["Netherlands","EUR"],["New Zealand","NZD"],["Nicaragua","NIO"],["Niger","XOF"],["Nigeria","NGN"],["North Korea","KPW"],["North Macedonia","MKD"],["Norway","NOK"],
+["Oman","OMR"],
+["Pakistan","PKR"],["Palau","USD"],["Palestine","ILS"],["Panama","PAB"],["Papua New Guinea","PGK"],["Paraguay","PYG"],["Peru","PEN"],["Philippines","PHP"],["Poland","PLN"],["Portugal","EUR"],
+["Qatar","QAR"],
+["Republic of the Congo","XAF"],["Romania","RON"],["Russia","RUB"],["Rwanda","RWF"],
+["Saint Kitts and Nevis","XCD"],["Saint Lucia","XCD"],["Saint Vincent and the Grenadines","XCD"],["Samoa","WST"],["San Marino","EUR"],["Sao Tome and Principe","STN"],["Saudi Arabia","SAR"],["Senegal","XOF"],["Serbia","RSD"],["Seychelles","SCR"],["Sierra Leone","SLE"],["Singapore","SGD"],["Slovakia","EUR"],["Slovenia","EUR"],["Solomon Islands","SBD"],["Somalia","SOS"],["South Africa","ZAR"],["South Korea","KRW"],["South Sudan","SSP"],["Spain","EUR"],["Sri Lanka","LKR"],["Sudan","SDG"],["Suriname","SRD"],["Sweden","SEK"],["Switzerland","CHF"],["Syria","SYP"],
+["Taiwan","TWD"],["Tajikistan","TJS"],["Tanzania","TZS"],["Thailand","THB"],["Timor-Leste","USD"],["Togo","XOF"],["Tonga","TOP"],["Trinidad and Tobago","TTD"],["Tunisia","TND"],["Turkey","TRY"],["Turkmenistan","TMT"],["Tuvalu","AUD"],
+["Uganda","UGX"],["Ukraine","UAH"],["United Arab Emirates","AED"],["United Kingdom","GBP"],["United States","USD"],["Uruguay","UYU"],["Uzbekistan","UZS"],
+["Vanuatu","VUV"],["Vatican City","EUR"],["Venezuela","VES"],["Vietnam","VND"],
+["Yemen","YER"],["Zambia","ZMW"],["Zimbabwe","ZiG"]
+]; 
+const bnCountries={
+ "Afghanistan":"আফগানিস্তান",
+ "Albania":"আলবেনিয়া",
+ "Algeria":"আলজেরিয়া",
+ "Andorra":"আন্ডোরা",
+ "Angola":"অ্যাঙ্গোলা",
+ "Antigua and Barbuda":"অ্যান্টিগুয়া ও বারবুডা",
+ "Argentina":"আর্জেন্টিনা",
+ "Armenia":"আর্মেনিয়া",
+ "Australia":"অস্ট্রেলিয়া",
+ "Austria":"অস্ট্রিয়া",
+ "Azerbaijan":"আজারবাইজান",
+ "Bahamas":"বাহামা দ্বীপপুঞ্জ",
+ "Bahrain":"বাহারিন",
+ "Bangladesh":"বাংলাদেশ",
+ "Barbados":"বার্বাডোজ",
+ "Belarus":"বেলারুশ",
+ "Belgium":"বেলজিয়াম",
+ "Belize":"বেলিজ",
+ "Benin":"বেনিন",
+ "Bhutan":"ভুটান",
+ "Bolivia":"বলিভিয়া",
+ "Bosnia and Herzegovina":"বসনিয়া ও হার্জেগোভিনা",
+ "Botswana":"বতসোয়ানা",
+ "Brazil":"ব্রাজিল",
+ "Bulgaria":"বুলগেরিয়া",
+ "Burkina Faso":"বুরকিনা ফাসো",
+ "Burundi":"বুরুন্ডি",
+ "Cambodia":"কম্বোডিয়া",
+ "Cameroon":"ক্যামেরুন",
+ "Canada":"কানাডা",
+ "Central African Republic":"মধ্য আফ্রিকার প্রজাতন্ত্র",
+ "Chad":"চাদ",
+ "Chile":"চিলি",
+ "China":"চীন",
+ "Colombia":"কলম্বিয়া",
+ "Comoros":"কমোরোস",
+ "Costa Rica":"কোস্টারিকা",
+ "Croatia":"ক্রোয়েশিয়া",
+ "Cuba":"কিউবা",
+ "Cyprus":"সাইপ্রাস",
+ "Czechia":"চেকিয়া",
+ "Denmark":"ডেনমার্ক",
+ "Djibouti":"জিবুতি",
+ "Dominica":"ডোমিনিকা",
+ "Dominican Republic":"ডোমেনিকান প্রজাতন্ত্র",
+ "Ecuador":"ইকুয়েডর",
+ "Egypt":"মিশর",
+ "El Salvador":"এল সালভেদর",
+ "Equatorial Guinea":"নিরক্ষীয় গিনি",
+ "Eritrea":"ইরিত্রিয়া",
+ "Estonia":"এস্তোনিয়া",
+ "Eswatini":"ইসওয়াতিনি",
+ "Ethiopia":"ইথিওপিয়া",
+ "Fiji":"ফিজি",
+ "Finland":"ফিনল্যান্ড",
+ "France":"ফ্রান্স",
+ "Gabon":"গ্যাবন",
+ "Gambia":"গাম্বিয়া",
+ "Georgia":"জর্জিয়া",
+ "Germany":"জার্মানি",
+ "Ghana":"ঘানা",
+ "Greece":"গ্রীস",
+ "Grenada":"গ্রেনাডা",
+ "Guatemala":"গুয়াতেমালা",
+ "Guinea":"গিনি",
+ "Guinea-Bissau":"গিনি-বিসাউ",
+ "Guyana":"গিয়ানা",
+ "Haiti":"হাইতি",
+ "Honduras":"হন্ডুরাস",
+ "Hungary":"হাঙ্গেরি",
+ "Iceland":"আইসল্যান্ড",
+ "India":"ভারত",
+ "Indonesia":"ইন্দোনেশিয়া",
+ "Iran":"ইরান",
+ "Iraq":"ইরাক",
+ "Ireland":"আয়ারল্যান্ড",
+ "Israel":"ইজরায়েল",
+ "Italy":"ইতালি",
+ "Jamaica":"জামাইকা",
+ "Japan":"জাপান",
+ "Jordan":"জর্ডন",
+ "Kazakhstan":"কাজাখস্তান",
+ "Kenya":"কেনিয়া",
+ "Kiribati":"কিরিবাতি",
+ "Kuwait":"কুয়েত",
+ "Kyrgyzstan":"কিরগিজিস্তান",
+ "Laos":"লাওস",
+ "Latvia":"লাটভিয়া",
+ "Lebanon":"লেবানন",
+ "Lesotho":"লেসোথো",
+ "Liberia":"লাইবেরিয়া",
+ "Libya":"লিবিয়া",
+ "Liechtenstein":"লিচেনস্টেইন",
+ "Lithuania":"লিথুয়ানিয়া",
+ "Luxembourg":"লাক্সেমবার্গ",
+ "Madagascar":"মাদাগাস্কার",
+ "Malawi":"মালাউই",
+ "Malaysia":"মালয়েশিয়া",
+ "Maldives":"মালদ্বীপ",
+ "Mali":"মালি",
+ "Malta":"মাল্টা",
+ "Marshall Islands":"মার্শাল দ্বীপপুঞ্জ",
+ "Mauritania":"মরিতানিয়া",
+ "Mauritius":"মরিশাস",
+ "Mexico":"মেক্সিকো",
+ "Moldova":"মলডোভা",
+ "Monaco":"মোনাকো",
+ "Mongolia":"মঙ্গোলিয়া",
+ "Montenegro":"মন্টিনিগ্রো",
+ "Morocco":"মোরক্কো",
+ "Mozambique":"মোজাম্বিক",
+ "Myanmar":"মায়ানমার (বার্মা)",
+ "Namibia":"নামিবিয়া",
+ "Nauru":"নাউরু",
+ "Nepal":"নেপাল",
+ "Netherlands":"নেদারল্যান্ডস",
+ "New Zealand":"নিউজিল্যান্ড",
+ "Nicaragua":"নিকারাগুয়া",
+ "Niger":"নাইজার",
+ "Nigeria":"নাইজেরিয়া",
+ "North Korea":"উত্তর কোরিয়া",
+ "North Macedonia":"উত্তর ম্যাসেডোনিয়া",
+ "Norway":"নরওয়ে",
+ "Oman":"ওমান",
+ "Pakistan":"পাকিস্তান",
+ "Palau":"পালাউ",
+ "Panama":"পানামা",
+ "Papua New Guinea":"পাপুয়া নিউ গিনি",
+ "Paraguay":"প্যারাগুয়ে",
+ "Peru":"পেরু",
+ "Philippines":"ফিলিপাইন",
+ "Poland":"পোল্যান্ড",
+ "Portugal":"পর্তুগাল",
+ "Qatar":"কাতার",
+ "Republic of the Congo":"কঙ্গো - ব্রাজাভিল",
+ "Romania":"রোমানিয়া",
+ "Rwanda":"রুয়ান্ডা",
+ "Saint Kitts and Nevis":"সেন্ট কিটস ও নেভিস",
+ "Saint Lucia":"সেন্ট লুসিয়া",
+ "Saint Vincent and the Grenadines":"সেন্ট ভিনসেন্ট ও গ্রেনাডিনস",
+ "Samoa":"সামোয়া",
+ "San Marino":"সান মারিনো",
+ "Sao Tome and Principe":"সাওটোমা ও প্রিন্সিপি",
+ "Saudi Arabia":"সৌদি আরব",
+ "Senegal":"সেনেগাল",
+ "Serbia":"সার্বিয়া",
+ "Seychelles":"সিসিলি",
+ "Sierra Leone":"সিয়েরা লিওন",
+ "Singapore":"সিঙ্গাপুর",
+ "Slovakia":"স্লোভাকিয়া",
+ "Slovenia":"স্লোভানিয়া",
+ "Solomon Islands":"সলোমন দ্বীপপুঞ্জ",
+ "Somalia":"সোমালিয়া",
+ "South Africa":"দক্ষিণ আফ্রিকা",
+ "South Korea":"দক্ষিণ কোরিয়া",
+ "South Sudan":"দক্ষিণ সুদান",
+ "Spain":"স্পেন",
+ "Sri Lanka":"শ্রীলঙ্কা",
+ "Sudan":"সুদান",
+ "Suriname":"সুরিনাম",
+ "Sweden":"সুইডেন",
+ "Switzerland":"সুইজারল্যান্ড",
+ "Syria":"সিরিয়া",
+ "Taiwan":"তাইওয়ান",
+ "Tajikistan":"তাজিকিস্তান",
+ "Tanzania":"তাঞ্জানিয়া",
+ "Thailand":"থাইল্যান্ড",
+ "Timor-Leste":"তিমুর-লেস্তে",
+ "Togo":"টোগো",
+ "Tonga":"টোঙ্গা",
+ "Trinidad and Tobago":"ত্রিনিনাদ ও টোব্যাগো",
+ "Tunisia":"তিউনিসিয়া",
+ "Turkmenistan":"তুর্কমেনিস্তান",
+ "Tuvalu":"টুভালু",
+ "Uganda":"উগান্ডা",
+ "Ukraine":"ইউক্রেন",
+ "United Arab Emirates":"সংযুক্ত আরব আমিরাত",
+ "United Kingdom":"যুক্তরাজ্য",
+ "United States":"যুক্তরাষ্ট্র",
+ "Uruguay":"উরুগুয়ে",
+ "Uzbekistan":"উজবেকিস্তান",
+ "Vanuatu":"ভানুয়াটু",
+ "Venezuela":"ভেনেজুয়েলা",
+ "Vietnam":"ভিয়েতনাম",
+ "Yemen":"ইয়েমেন",
+ "Zambia":"জাম্বিয়া",
+ "Zimbabwe":"জিম্বাবোয়ে",
+ "Russia":"রাশিয়া",
+ "Turkey":"তুরস্ক",
+ "Brunei":"ব্রুনেই",
+ "Cape Verde":"কেপ ভার্দে",
+ "Democratic Republic of the Congo":"গণতান্ত্রিক কঙ্গো প্রজাতন্ত্র",
+ "Kosovo":"কসোভো",
+ "Micronesia":"মাইক্রোনেশিয়া",
+ "Palestine":"ফিলিস্তিন",
+ "Vatican City":"ভ্যাটিকান সিটি"
+};
+let fromCode="INR", toCode="BDT", rates=null;
+const commonFrom=["INR","BDT","USD","EUR","SAR","AED","GBP","PKR","MYR","JPY"];
+const commonTo=["BDT","INR","USD","EUR","SAR","AED","GBP","PKR","MYR","JPY"];
+const preferredCountryForCode={INR:"India",BDT:"Bangladesh",USD:"United States",EUR:"France",SAR:"Saudi Arabia",AED:"United Arab Emirates",GBP:"United Kingdom",PKR:"Pakistan",MYR:"Malaysia",JPY:"Japan"};
+const nameFor = code => {
+ const preferred=preferredCountryForCode[code];
+ if(preferred) return preferred;
+ const c=countries.find(x=>x[1]===code);
+ return c ? c[0] : code;
+};
+function makePills(id, codes, selected, choose){
+ const el=document.getElementById(id); el.innerHTML="";
+ codes.forEach(code=>{
+   const b=document.createElement("button"); b.className="pill"+(code===selected?(id==="fromPills"?" active-from":" active-to"):"");
+   b.textContent=(language==="bn"?(bnCountries[nameFor(code)]||nameFor(code)):nameFor(code))+" · "+code; b.title=nameFor(code);
+   b.onclick=()=>choose(code); el.appendChild(b);
+ });
+}
+function render(){
+ makePills("fromPills",commonFrom,fromCode,c=>{fromCode=c;document.getElementById("fromSearch").value="";render();calculate()});
+ makePills("toPills",commonTo,toCode,c=>{toCode=c;document.getElementById("toSearch").value="";render();calculate()});
+}
+function setupSearch(inputId,listId,side){
+ const input=document.getElementById(inputId), list=document.getElementById(listId);
+ function show(){
+   const q=input.value.trim().toLowerCase();
+   const found=countries.filter(c=>!q || c[0].toLowerCase().includes(q)||c[1].toLowerCase().includes(q)||(bnCountries[c[0]]||"").toLowerCase().includes(q)).slice(0,70);
+   list.innerHTML="";
+   found.forEach(c=>{
+     const d=document.createElement("div"); d.className="country-option"; d.dataset.country=c[0]; d.dataset.code=c[1]; if(c[1]=== (side==="from"?fromCode:toCode)) d.classList.add(side==="from"?"selected-from":"selected-to"); d.textContent=(language==="bn"?(bnCountries[c[0]]||c[0]):c[0])+" · "+c[1];
+     d.onclick=()=>{if(side==="from")fromCode=c[1];else toCode=c[1];input.value=(language==="bn"?(bnCountries[c[0]]||c[0]):c[0])+" · "+c[1];list.classList.remove("show");render();calculate()};
+     list.appendChild(d);
+   });
+   list.classList.toggle("show",true);
+ }
+ input.addEventListener("focus",show); input.addEventListener("input",show);
+ // দ্বিতীয়বার খালি সার্চ বক্সে ট্যাপ করলে তালিকা ও কিবোর্ড বন্ধ হবে
+ input.addEventListener("pointerdown",e=>{
+   if(document.activeElement===input && list.classList.contains("show") && input.value.trim()===""){
+     e.preventDefault(); list.classList.remove("show"); input.blur();
+   }
+ });
+ document.addEventListener("click",e=>{if(!e.target.closest("#"+inputId)&&!e.target.closest("#"+listId))list.classList.remove("show")});
+}
+function formatNumber(n){
+ if(!Number.isFinite(n)) return "—";
+ return n.toLocaleString("en-US",{maximumFractionDigits:6,minimumFractionDigits:0,useGrouping:false});
+}
+function calculate(){
+ const amount=Number(document.getElementById("amount").value);
+ const result=document.getElementById("result");
+ if(document.getElementById("amount").value===""||!Number.isFinite(amount)){result.textContent="—";return}
+ if(fromCode===toCode){result.textContent=formatNumber(amount);return}
+ if(rates && rates[fromCode] && rates[toCode]){
+   result.textContent=formatNumber(amount*rates[toCode]/rates[fromCode]);
+ } else {
+   result.textContent="—";
+ }
+}
+document.getElementById("amount").addEventListener("input",calculate);
+setupSearch("fromSearch","fromList","from");setupSearch("toSearch","toList","to");
+render();calculate();
+async function loadRates(){
+ try{
+   const res=await fetch("https://open.er-api.com/v6/latest/USD?cacheBust="+Date.now(),{cache:"no-store"});
+   if(!res.ok) throw new Error("network");
+   const data=await res.json();
+   if(data.result!=="success"||!data.rates||!data.rates.USD) throw new Error("rates");
+   rates=data.rates;
+   calculate();
+ }catch(e){
+   rates=null;
+   calculate();
+ }
+}
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")loadRates()});
+loadRates();
+</script>
+</body>
+</html>
